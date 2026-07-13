@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d0d5dd transparent;
+}
+
+body {
+  @apply font-body text-[#1B222C] bg-paper antialiased;
+}
+
+html.dark body {
+  @apply bg-ink text-white;
+}
+
+h1, h2, h3, h4 {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.data-mono {
+  @apply font-mono tracking-tight;
+}
+
+/* Route-dash signature divider used across the app */
+.route-divider {
+  position: relative;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #e4e7ec 0, #e4e7ec 6px, transparent 6px, transparent 12px);
+}
+
+html.dark .route-divider {
+  background: repeating-linear-gradient(90deg, #2a3442 0, #2a3442 6px, transparent 6px, transparent 12px);
+}
+
+.glass-panel {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+html.dark .glass-panel {
+  background: rgba(26, 34, 44, 0.72);
+}
+
+.focus-ring {
+  @apply outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d0d5dd;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

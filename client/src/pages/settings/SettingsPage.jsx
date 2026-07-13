@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { FiSun, FiMoon, FiUsers } from 'react-icons/fi';
+import { FiSun, FiMoon, FiUsers, FiTrash2 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { Card, Select } from '../../components/ui/Primitives';
 import StatusBadge from '../../components/ui/StatusBadge';
+import ConfirmDialog from '../../components/modals/ConfirmDialog';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -14,17 +15,20 @@ const SettingsPage = () => {
   const { theme, toggleTheme } = useTheme();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
+  const canManageUsers = ['Admin', 'Fleet Manager'].includes(user?.role);
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(isAdmin);
+  const [loading, setLoading] = useState(canManageUsers);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canManageUsers) {
       api
         .get('/users', { params: { limit: 50 } })
         .then((res) => setUsers(res.data.data))
         .finally(() => setLoading(false));
     }
-  }, [isAdmin]);
+  }, [canManageUsers]);
 
   const handleRoleChange = async (id, role) => {
     try {
@@ -33,6 +37,31 @@ const SettingsPage = () => {
       toast.success('Role updated');
     } catch {
       toast.error('Failed to update role');
+    }
+  };
+
+  const handleStatusToggle = async (u) => {
+    const nextActive = !u.isActive;
+    try {
+      await api.put(`/users/${u._id}`, { isActive: nextActive });
+      setUsers((prev) => prev.map((usr) => (usr._id === u._id ? { ...usr, isActive: nextActive } : usr)));
+      toast.success(nextActive ? 'User marked as available' : 'User suspended');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update status');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/users/${deleteTarget._id}`);
+      setUsers((prev) => prev.filter((u) => u._id !== deleteTarget._id));
+      toast.success('User removed');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove user');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -70,7 +99,7 @@ const SettingsPage = () => {
         </div>
       </Card>
 
-      {isAdmin && (
+      {canManageUsers && (
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-line p-5 dark:border-white/10">
             <FiUsers className="h-4 w-4 text-accent" />
@@ -78,7 +107,7 @@ const SettingsPage = () => {
           </div>
           {loading ? (
             <div className="p-5">
-              <TableSkeleton rows={5} cols={4} />
+              <TableSkeleton rows={5} cols={5} />
             </div>
           ) : (
             <>
@@ -88,16 +117,37 @@ const SettingsPage = () => {
                   <div key={u._id} className="space-y-2.5 p-4">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-medium">{u.name}</p>
-                      <StatusBadge status={u.isActive ? 'Available' : 'Suspended'} />
+                      <button
+                        onClick={() => handleStatusToggle(u)}
+                        className="focus-ring rounded-full"
+                        aria-label={`Mark ${u.name} as ${u.isActive ? 'suspended' : 'available'}`}
+                      >
+                        <StatusBadge status={u.isActive ? 'Available' : 'Suspended'} />
+                      </button>
                     </div>
                     <p className="text-xs text-muted">{u.email}</p>
-                    <Select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="w-full">
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      {isAdmin ? (
+                        <Select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="w-full">
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <span className="flex-1 text-sm text-muted">{u.role}</span>
+                      )}
+                      {isAdmin && u._id !== user?._id && (
+                        <button
+                          onClick={() => setDeleteTarget(u)}
+                          className="focus-ring shrink-0 rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                          aria-label={`Remove ${u.name}`}
+                        >
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -111,6 +161,7 @@ const SettingsPage = () => {
                       <th className="px-5 py-3 font-medium">Email</th>
                       <th className="px-5 py-3 font-medium">Status</th>
                       <th className="px-5 py-3 font-medium">Role</th>
+                      <th className="px-5 py-3 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -119,16 +170,37 @@ const SettingsPage = () => {
                         <td className="px-5 py-3.5 font-medium">{u.name}</td>
                         <td className="px-5 py-3.5 text-muted">{u.email}</td>
                         <td className="px-5 py-3.5">
-                          <StatusBadge status={u.isActive ? 'Available' : 'Suspended'} />
+                          <button
+                            onClick={() => handleStatusToggle(u)}
+                            className="focus-ring rounded-full"
+                            aria-label={`Mark ${u.name} as ${u.isActive ? 'suspended' : 'available'}`}
+                          >
+                            <StatusBadge status={u.isActive ? 'Available' : 'Suspended'} />
+                          </button>
                         </td>
                         <td className="px-5 py-3.5">
-                          <Select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="w-auto">
-                            {ROLES.map((r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ))}
-                          </Select>
+                          {isAdmin ? (
+                            <Select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="w-auto">
+                              {ROLES.map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <span className="text-muted">{u.role}</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          {isAdmin && u._id !== user?._id && (
+                            <button
+                              onClick={() => setDeleteTarget(u)}
+                              className="focus-ring rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                              aria-label={`Remove ${u.name}`}
+                            >
+                              <FiTrash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -139,6 +211,16 @@ const SettingsPage = () => {
           )}
         </Card>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteUser}
+        loading={deleting}
+        title="Remove user"
+        message={`Are you sure you want to remove ${deleteTarget?.name}? This action cannot be undone.`}
+        confirmLabel="Remove"
+      />
     </div>
   );
 };

@@ -1,8 +1,157 @@
 const asyncHandler = require('express-async-handler');
+const crypto = require('crypto');
 const User = require('../models/User');
 const generateToken = require('../utils/generateToken');
+const sendEmail = require('../utils/sendEmail');
+const { ROLES } = require('../constants/roles');
 
+// Frontend URL used to build the link inside verification emails.
+// Set CLIENT_URL in your .env, e.g. CLIENT_URL=http://localhost:5173
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+// @desc    Public self-registration
+// @route   POST /api/auth/register
+// @access  Public
+//
+// SECURITY NOTE: this endpoint is reachable by anyone on the internet, so it must
+// never trust the client for privileged fields. Regardless of what the request body
+// contains, every self-registered account is created as the lowest-privilege role
+// and starts INACTIVE. The account must also be EMAIL VERIFIED before an Admin's
+// approval even matters (login checks both). Elevated roles (Admin, Fleet Manager,
+// etc.) can only be created through the separate admin-only `adminCreateUser`
+// endpoint below, which requires an authenticated Admin session.
+//
+// BOOTSTRAP EXCEPTION: if the database has no users at all yet, there is no Admin
+// who could ever approve anyone — the system would be permanently locked. So the
+// very first account ever created is made an active, already-verified Admin
+// automatically. This only fires once, on a genuinely empty users collection;
+// every registration after that follows the normal restricted path above.
 const registerUser = asyncHandler(async (req, res) => {
+  const { name, email, password, phone } = req.body;
+
+  const userExists = await User.findOne({ email });
+  if (userExists) {
+    res.status(400);
+    throw new Error('A user with this email already exists');
+  }
+
+  const isFirstUser = (await User.estimatedDocumentCount()) === 0;
+
+  const user = await User.create({
+    name,
+    email,
+    password,
+    phone,
+    role: isFirstUser ? ROLES.ADMIN : ROLES.DRIVER,
+    isActive: isFirstUser,
+    isEmailVerified: isFirstUser,
+  });
+
+  if (isFirstUser) {
+    res.status(201).json({
+      success: true,
+      message: 'Admin account created. You can sign in now.',
+      data: {
+        user: user.toSafeObject(),
+        token: generateToken(user._id, user.role),
+      },
+    });
+    return;
+  }
+
+  const rawToken = user.generateEmailVerificationToken();
+  await user.save();
+
+  const verifyUrl = `${CLIENT_URL}/verify-email/${rawToken}`;
+
+  // Fire-and-forget email — sendEmail() swallows its own errors, so a mail
+  // provider outage never blocks or fails the registration response itself.
+  sendEmail({
+    to: user.email,
+    subject: 'Verify your email for TransitOps',
+    html: `<p>Hi ${user.name},</p><p>Please confirm your email address to continue your TransitOps registration:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours. After verifying, an administrator will still need to approve your account before you can sign in.</p>`,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Registration submitted. Check your email to verify your address — an administrator will then need to approve your account before you can sign in.',
+    data: {
+      user: user.toSafeObject(),
+    },
+  });
+});
+
+// @desc    Verify a user's email address via the token emailed to them
+// @route   GET /api/auth/verify-email/:token
+// @access  Public
+const verifyEmail = asyncHandler(async (req, res) => {
+  const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
+
+  const user = await User.findOne({
+    emailVerificationToken: hashedToken,
+    emailVerificationExpires: { $gt: Date.now() },
+  }).select('+emailVerificationToken +emailVerificationExpires');
+
+  if (!user) {
+    res.status(400);
+    throw new Error('This verification link is invalid or has expired. Please request a new one.');
+  }
+
+  user.isEmailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpires = undefined;
+  await user.save();
+
+  // Only now let Admins know a (verified, real) person is waiting for approval —
+  // this keeps admin inboxes free of notifications for addresses that were never
+  // actually confirmed by their owner.
+  User.find({ role: ROLES.ADMIN, isActive: true })
+    .select('email')
+    .then((admins) => {
+      if (!admins.length) return;
+      sendEmail({
+        to: admins.map((a) => a.email).join(','),
+        subject: 'New TransitOps registration awaiting approval',
+        html: `<p>${user.name} (${user.email}) has verified their email and is waiting for approval.</p><p>Go to Settings &gt; User &amp; Role Management to review.</p>`,
+      });
+    });
+
+  res.json({
+    success: true,
+    message: 'Email verified. An administrator must still approve your account before you can sign in.',
+  });
+});
+
+// @desc    Resend the email verification link
+// @route   POST /api/auth/resend-verification
+// @access  Public
+const resendVerification = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email, isEmailVerified: false });
+
+  // Always return the same generic response whether or not the account exists /
+  // is already verified — this avoids leaking which emails are registered.
+  if (user) {
+    const rawToken = user.generateEmailVerificationToken();
+    await user.save();
+    const verifyUrl = `${CLIENT_URL}/verify-email/${rawToken}`;
+    sendEmail({
+      to: user.email,
+      subject: 'Verify your email for TransitOps',
+      html: `<p>Hi ${user.name},</p><p>Here's your new verification link:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours.</p>`,
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'If an unverified account exists for that email, a new verification link has been sent.',
+  });
+});
+
+// @desc    Admin-only: create a user directly with any role, active immediately
+// @route   POST /api/auth/admin/create-user
+// @access  Private/Admin (see authorize('Admin') in authRoutes.js)
+const adminCreateUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone } = req.body;
 
   const userExists = await User.findOne({ email });
@@ -11,47 +160,43 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error('A user with this email already exists');
   }
 
-  const user = await User.create({ name, email, password, role, phone });
+  const safeRole = Object.values(ROLES).includes(role) ? role : ROLES.DRIVER;
+
+  const user = await User.create({
+    name,
+    email,
+    password,
+    phone,
+    role: safeRole,
+    isActive: true,
+    isEmailVerified: true,
+  });
 
   res.status(201).json({
     success: true,
-    message: 'User registered successfully',
-    data: {
-      user: user.toSafeObject(),
-      token: generateToken(user._id, user.role),
-    },
+    message: 'User created successfully',
+    data: { user: user.toSafeObject() },
   });
 });
 
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  // 🔍 Debug Logs
-  console.log("=================================");
-  console.log("Login Request Body:", req.body);
-  console.log("Email:", email);
-  console.log("Password:", password);
+
   const user = await User.findOne({ email }).select('+password');
-
-  console.log("User Found:", user ? "YES" : "NO");
-
-  if (user) {
-    console.log("DB Email:", user.email);
-    console.log("DB Password (Hashed):", user.password);
-
-    const isMatch = await user.matchPassword(password);
-
-    console.log("Password Match:", isMatch);
-    console.log("User Active:", user.isActive);
-  }
 
   if (!user || !(await user.matchPassword(password))) {
     res.status(401);
     throw new Error('Invalid email or password');
   }
 
+  if (!user.isEmailVerified) {
+    res.status(403);
+    throw new Error('Please verify your email address before signing in. Check your inbox for the verification link.');
+  }
+
   if (!user.isActive) {
     res.status(403);
-    throw new Error('This account has been deactivated. Contact an administrator.');
+    throw new Error('Your account is inactive or pending admin approval. Contact an administrator.');
   }
 
   user.lastLogin = new Date();
@@ -100,4 +245,4 @@ const updateProfile = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Profile updated', data: updated.toSafeObject() });
 });
 
-module.exports = { registerUser, loginUser, getMe, logoutUser, updateProfile };
+module.exports = { registerUser, adminCreateUser, verifyEmail, resendVerification, loginUser, getMe, logoutUser, updateProfile };

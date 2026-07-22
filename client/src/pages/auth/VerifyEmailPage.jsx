@@ -14,11 +14,6 @@ const VerifyEmailPage = () => {
   const [resendEmail, setResendEmail] = useState('');
   const [resending, setResending] = useState(false);
 
-  // React StrictMode intentionally double-invokes effects in development, which
-  // would otherwise call this one-time-use verification endpoint twice: the first
-  // call succeeds and clears the token server-side, so the second call would then
-  // (incorrectly) report "invalid or expired". This ref makes sure only the first
-  // call actually fires, in both dev (StrictMode) and production.
   const hasRun = useRef(false);
 
   useEffect(() => {

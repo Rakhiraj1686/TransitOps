@@ -9,19 +9,25 @@ export const AuthProvider = ({ children }) => {
     const stored = localStorage.getItem('transitops_user');
     return stored ? JSON.parse(stored) : null;
   });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('transitops_token');
+
     if (!token) {
       setLoading(false);
       return;
     }
+
     authService
       .getMe()
       .then((res) => {
         setUser(res.data);
-        localStorage.setItem('transitops_user', JSON.stringify(res.data));
+        localStorage.setItem(
+          'transitops_user',
+          JSON.stringify(res.data)
+        );
       })
       .catch(() => {
         localStorage.removeItem('transitops_token');
@@ -31,38 +37,57 @@ export const AuthProvider = ({ children }) => {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const res = await authService.login({ email, password });
-    localStorage.setItem('transitops_token', res.data.token);
-    localStorage.setItem('transitops_user', JSON.stringify(res.data.user));
-    setUser(res.data.user);
-    toast.success(`Welcome back, ${res.data.user.name.split(' ')[0]}`);
-    return res.data.user;
-  }, []);
+ const login = useCallback(async (email, password) => {
+  const res = await authService.login({ email, password });
 
+  console.log("LOGIN RESPONSE 👉", res);
+
+  localStorage.setItem('transitops_token', res.data.token);
+  localStorage.setItem('transitops_user', JSON.stringify(res.data.user));
+
+  setUser(res.data.user);
+
+  toast.success(`Welcome back, ${res.data.user.name}`);
+
+  return res.data.user;
+}, []);
+
+  // ✅ Register should NOT log the user in
   const register = useCallback(async (payload) => {
     const res = await authService.register(payload);
-    localStorage.setItem('transitops_token', res.data.token);
-    localStorage.setItem('transitops_user', JSON.stringify(res.data.user));
-    setUser(res.data.user);
-    toast.success('Account created successfully');
-    return res.data.user;
+
+    toast.success(res.message);
+
+    return res;
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('transitops_token');
     localStorage.removeItem('transitops_user');
     setUser(null);
-    toast('Signed out', { icon: '👋' });
+    toast.success('Signed out');
   }, []);
 
   const updateUser = useCallback((updated) => {
     setUser(updated);
-    localStorage.setItem('transitops_user', JSON.stringify(updated));
+    localStorage.setItem(
+      'transitops_user',
+      JSON.stringify(updated)
+    );
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        updateUser,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -70,6 +95,10 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+
   return ctx;
 };

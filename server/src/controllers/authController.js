@@ -182,32 +182,40 @@ const adminCreateUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  const user = await User.findOne({ email }).select('+password');
+  const user = await User.findOne({ email }).select("+password");
+
+  console.log("User:", user);
 
   if (!user || !(await user.matchPassword(password))) {
     res.status(401);
-    throw new Error('Invalid email or password');
+    throw new Error("Invalid email or password");
   }
+
+  console.log("Password Match: true");
+  console.log("isEmailVerified:", user.isEmailVerified);
+  console.log("isActive:", user.isActive);
 
   if (!user.isEmailVerified) {
     res.status(403);
-    throw new Error('Please verify your email address before signing in. Check your inbox for the verification link.');
+    throw new Error("Please verify your email address before signing in.");
   }
 
   if (!user.isActive) {
     res.status(403);
-    throw new Error('Your account is inactive or pending admin approval. Contact an administrator.');
+    throw new Error("Your account is inactive.");
   }
 
   user.lastLogin = new Date();
   await user.save();
 
-  res.json({
+  const token = generateToken(user._id, user.role);
+
+  res.status(200).json({
     success: true,
-    message: 'Login successful',
+    message: "Login successful",
     data: {
       user: user.toSafeObject(),
-      token: generateToken(user._id, user.role),
+      token,
     },
   });
 });

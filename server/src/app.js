@@ -21,16 +21,18 @@ const userRoutes = require('./routes/userRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+const productionClientUrl = 'https://transitops-rk.vercel.app';
+const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
+const allowedOrigins = new Set([...configuredOrigins, productionClientUrl]);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+      if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) {
         return callback(null, true);
       }
       return callback(new Error('Origin is not allowed by CORS'));

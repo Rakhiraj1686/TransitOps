@@ -1,7 +1,7 @@
 import api from './api';
 
 const apiOrigin = import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? 'https://transitops-a8uk.onrender.com' : '');
+  (import.meta.env.PROD ? 'https://transitops-fkvl.onrender.com' : '');
 
 export const dashboardService = {
   getKpis: () => api.get('/dashboard/kpis').then((r) => r.data),

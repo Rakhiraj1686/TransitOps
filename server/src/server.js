@@ -5,7 +5,15 @@ dotenv.config();
 const app = require("./app");
 const connectDB = require("./config/db");
 
-const PORT = process.env.PORT || 5000;
+const configuredPort = process.env.PORT || "5000";
+const PORT = Number(configuredPort);
+
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(
+    `[TransitOps API] Invalid PORT value: "${configuredPort}". PORT must be a number between 1 and 65535.`
+  );
+  process.exit(1);
+}
 
 const startServer = async () => {
   try {

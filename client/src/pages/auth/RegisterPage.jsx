@@ -19,12 +19,10 @@ const RegisterPage = () => {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
-      // Public registration is intentionally restricted server-side: role and
-      // active-status are never taken from the client, so there's no "role" field
-      // to submit here. New accounts are created as Driver + inactive, pending
-      // review by an Admin (see Settings > User Management).
+      // Public registration creates a Driver account; privileged roles remain
+      // restricted to the admin-only user management flow.
       const res = await api.post('/auth/register', data);
-      toast.success(res.data?.message || 'Registration submitted for admin approval');
+      toast.success(res.data?.message || 'Registration successful');
       navigate('/login', { replace: true });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed');
@@ -37,7 +35,7 @@ const RegisterPage = () => {
     <div className="animate-fade-in">
       <h1 className="font-display text-2xl font-bold">Create your account</h1>
       <p className="mt-1.5 text-sm text-muted">
-        Requests are reviewed by an administrator before access is granted to the TransitOps console.
+        Create an account and sign in to the TransitOps console immediately.
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">

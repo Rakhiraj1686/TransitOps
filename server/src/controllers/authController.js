@@ -15,17 +15,12 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 //
 // SECURITY NOTE: this endpoint is reachable by anyone on the internet, so it must
 // never trust the client for privileged fields. Regardless of what the request body
-// contains, every self-registered account is created as the lowest-privilege role
-// and starts INACTIVE. The account must also be EMAIL VERIFIED before an Admin's
-// approval even matters (login checks both). Elevated roles (Admin, Fleet Manager,
-// etc.) can only be created through the separate admin-only `adminCreateUser`
-// endpoint below, which requires an authenticated Admin session.
+// contains, every self-registered account is created as the lowest-privilege role.
+// Elevated roles (Admin, Fleet Manager, etc.) can only be created through the
+// separate admin-only `adminCreateUser` endpoint below.
 //
-// BOOTSTRAP EXCEPTION: if the database has no users at all yet, there is no Admin
-// who could ever approve anyone — the system would be permanently locked. So the
-// very first account ever created is made an active, already-verified Admin
-// automatically. This only fires once, on a genuinely empty users collection;
-// every registration after that follows the normal restricted path above.
+// The first account is an Admin for bootstrap purposes. Later self-registered
+// accounts remain restricted to the Driver role, but can sign in immediately.
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password, phone } = req.body;
 
@@ -43,8 +38,8 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
     phone,
     role: isFirstUser ? ROLES.ADMIN : ROLES.DRIVER,
-    isActive: isFirstUser,
-    isEmailVerified: isFirstUser,
+    isActive: true,
+    isEmailVerified: true,
   });
 
   if (isFirstUser) {
@@ -59,22 +54,9 @@ const registerUser = asyncHandler(async (req, res) => {
     return;
   }
 
-  const rawToken = user.generateEmailVerificationToken();
-  await user.save();
-
-  const verifyUrl = `${CLIENT_URL}/verify-email/${rawToken}`;
-
-  // Fire-and-forget email — sendEmail() swallows its own errors, so a mail
-  // provider outage never blocks or fails the registration response itself.
-  sendEmail({
-    to: user.email,
-    subject: 'Verify your email for TransitOps',
-    html: `<p>Hi ${user.name},</p><p>Please confirm your email address to continue your TransitOps registration:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours. After verifying, an administrator will still need to approve your account before you can sign in.</p>`,
-  });
-
   res.status(201).json({
     success: true,
-    message: 'Registration submitted. Check your email to verify your address — an administrator will then need to approve your account before you can sign in.',
+    message: 'Registration successful. You can sign in now.',
     data: {
       user: user.toSafeObject(),
     },

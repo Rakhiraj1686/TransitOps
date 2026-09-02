@@ -8,5 +8,5 @@ export const dashboardService = {
 
 export const reportService = {
   getAnalytics: () => api.get('/reports/analytics').then((r) => r.data),
-  exportCsvUrl: () => '/api/reports/export/csv',
+  exportCsvUrl: () => `${import.meta.env.VITE_API_URL || ''}/api/reports/export/csv`,
 };

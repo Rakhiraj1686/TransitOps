@@ -1,5 +1,8 @@
 import api from './api';
 
+const apiOrigin = import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? 'https://transitops-a8uk.onrender.com' : '');
+
 export const dashboardService = {
   getKpis: () => api.get('/dashboard/kpis').then((r) => r.data),
   getCharts: () => api.get('/dashboard/charts').then((r) => r.data),
@@ -8,5 +11,5 @@ export const dashboardService = {
 
 export const reportService = {
   getAnalytics: () => api.get('/reports/analytics').then((r) => r.data),
-  exportCsvUrl: () => '/api/reports/export/csv',
+  exportCsvUrl: () => `${apiOrigin}/api/reports/export/csv`,
 };

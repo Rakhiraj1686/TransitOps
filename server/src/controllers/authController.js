@@ -32,6 +32,9 @@ const registerUser = asyncHandler(async (req, res) => {
 
   const isFirstUser = (await User.estimatedDocumentCount()) === 0;
 
+  // Bootstrap the very first account (Admin) as already verified and active so
+  // there's always a way into the app on a fresh install. Every later
+  // self-registration must go through the email verification flow below.
   const user = await User.create({
     name,
     email,
@@ -39,7 +42,7 @@ const registerUser = asyncHandler(async (req, res) => {
     phone,
     role: isFirstUser ? ROLES.ADMIN : ROLES.DRIVER,
     isActive: true,
-    isEmailVerified: true,
+    isEmailVerified: isFirstUser,
   });
 
   if (isFirstUser) {
@@ -54,9 +57,19 @@ const registerUser = asyncHandler(async (req, res) => {
     return;
   }
 
+  const rawToken = user.generateEmailVerificationToken();
+  await user.save();
+
+  const verifyUrl = `${CLIENT_URL}/verify-email/${rawToken}`;
+  await sendEmail({
+    to: user.email,
+    subject: 'Verify your email for TransitOps',
+    html: `<p>Hi ${user.name},</p><p>Thanks for registering on TransitOps. Please verify your email address to activate your account:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours. If you didn't request this, you can ignore this email.</p>`,
+  });
+
   res.status(201).json({
     success: true,
-    message: 'Registration successful. You can sign in now.',
+    message: 'Registration successful! Please check your email and verify your account before logging in.',
     data: {
       user: user.toSafeObject(),
     },

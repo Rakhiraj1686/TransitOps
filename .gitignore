@@ -1,6 +1,5 @@
 node_modules/
 .env
-TransitOps/
 dist/
 build/
 *.log

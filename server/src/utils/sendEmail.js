@@ -21,8 +21,7 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
- * Sends an email. Never throws — logs and swallows errors so a failed email
- * (e.g. missing SMTP config) never breaks the calling request (registration, etc.).
+ * Sends an email and lets the caller handle delivery failures.
  */
 const sendEmail = async ({ to, subject, html }) => {
   try {
@@ -34,8 +33,10 @@ const sendEmail = async ({ to, subject, html }) => {
     });
 
     console.log("✅ Email sent:", info.response);
+    return info;
   } catch (err) {
     console.error("❌ Email Error:", err);
+    throw new Error('Verification email could not be sent. Please try again later.');
   }
 };
 

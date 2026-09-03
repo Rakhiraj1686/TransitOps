@@ -35,7 +35,7 @@ const RegisterPage = () => {
     <div className="animate-fade-in">
       <h1 className="font-display text-2xl font-bold">Create your account</h1>
       <p className="mt-1.5 text-sm text-muted">
-        Create an account and sign in to the TransitOps console immediately.
+        Create an account and verify your email before signing in.
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">

@@ -130,7 +130,7 @@ const resendVerification = asyncHandler(async (req, res) => {
     const rawToken = user.generateEmailVerificationToken();
     await user.save();
     const verifyUrl = `${CLIENT_URL}/verify-email/${rawToken}`;
-    sendEmail({
+    await sendEmail({
       to: user.email,
       subject: 'Verify your email for TransitOps',
       html: `<p>Hi ${user.name},</p><p>Here's your new verification link:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours.</p>`,

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
+import { FiMail, FiLock, FiArrowRight, FiRefreshCw } from 'react-icons/fi';
 import { useAuth } from '../../context/AuthContext';
+import { authService } from '../../services/authService';
 import { Field, Input } from '../../components/ui/Primitives';
 import Button from '../../components/ui/Button';
 import toast from 'react-hot-toast';
@@ -18,6 +19,8 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [resending, setResending] = useState(false);
   const {
     register,
     handleSubmit,
@@ -31,9 +34,23 @@ const LoginPage = () => {
       await login(data.email, data.password);
       navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Invalid email or password');
+      const message = err.response?.data?.message || 'Invalid email or password';
+      setUnverifiedEmail(err.response?.status === 403 && message.toLowerCase().includes('verify') ? data.email : '');
+      toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setResending(true);
+    try {
+      const response = await authService.resendVerification(unverifiedEmail);
+      toast.success(response.message || 'A new verification link has been sent.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not resend the verification link');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -78,6 +95,22 @@ const LoginPage = () => {
           Sign in
         </Button>
       </form>
+
+      {unverifiedEmail && (
+        <div className="mt-4 rounded-xl border border-line p-4 dark:border-white/10">
+          <p className="text-sm text-muted">Your email is not verified yet.</p>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-3 w-full"
+            loading={resending}
+            icon={FiRefreshCw}
+            onClick={resendVerification}
+          >
+            Resend verification link
+          </Button>
+        </div>
+      )}
 
       <p className="mt-6 text-center text-sm text-muted">
         Don't have an account?{' '}
